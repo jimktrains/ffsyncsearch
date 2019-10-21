@@ -49,7 +49,7 @@ class Collections:
 
     def keys(self):
         #TODO: Include newest item's time
-        collections = self.auth_request.request(f"info/{path}")
+        collections = self.auth_request.request(f"info/collections")
         return collections
 
     def items(self):

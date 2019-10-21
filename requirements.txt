@@ -2,3 +2,7 @@ PyFxA
 requests
 hkdf
 pycrypto
+psycopg2
+readability-lxml
+requests-cache
+bs4

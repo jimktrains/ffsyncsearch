@@ -13,6 +13,13 @@ Sample: ::
     [user]
     email=address@example.com
     password=super_secret
+    
+    [db]
+    dbname=database_name
+    host=host_name_or_ip_or_socket
+    user=user_role
+    password=super_secret
+
 
 Files
 -----
@@ -21,3 +28,5 @@ Files
 * `auth.py` - Handles authentication
 * `utils.py` - Handles API calls to get and decrypt collctions and items
 * `schema.sql` - Initial thoughts on the schema to store this to
+* `Makefile` - Build a new DB
+* `page_fetcher.py` - Fetches the page text to place into the db
