@@ -8,7 +8,7 @@ history sidebar.
 config.ini
 ----------
 
-Sample:
+Sample: ::
 
     [user]
     email=address@example.com
