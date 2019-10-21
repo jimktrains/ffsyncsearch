@@ -1,2 +1,2 @@
 *.ini
-testbed.py
+__pycache__/
