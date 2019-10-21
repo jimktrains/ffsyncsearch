@@ -56,17 +56,9 @@ else:
     encryption_key = bytes.fromhex(config['fxa']['encryption_key'])
     hmac_key = bytes.fromhex(config['fxa']['hmac_key'])
 
-    if 'user' in config:
-        print("You can delete the [user] section from the config")
-
 user_id = hawk_resp['uid']
 endpoint = hawk_resp['api_endpoint']
 hawk_auth = HawkAuth(id=hawk_resp['id'], key=hawk_resp['key'])
-
-
-#TODO: Include newest item's time
-raw_resp=requests.get(f"{endpoint}/info/collections", auth=hawk_auth)
-collections = raw_resp.json()
 
 class AES_HMAC_KeyPairs:
     def __init__(self, e, h):
@@ -98,50 +90,52 @@ keypairs = AES_HMAC_KeyPairs(encryption_key, hmac_key)
 
 def get_collection(collection):
     raw_resp=requests.get(f"{endpoint}/storage/{collection}", auth=hawk_auth)
-    assert raw_resp.status_code == requests.codes.ok, f"{raw_resp.status_code} is not OK for Collection {collection}"
+    assert raw_resp.status_code == requests.codes.ok, f"{raw_resp.status_code} is not OK for collection {collection}"
 
     items = raw_resp.json()
     for item in items:
-        raw_resp=requests.get(f"{endpoint}/storage/{collection}/{item}", auth=hawk_auth)
-        resp  = raw_resp.json()
-        record = json.loads(resp['payload'])
+        yield get_item(collection, item)
 
-        ciphertext_b64  = record['ciphertext'].encode('ascii')
-        iv_b64          = record['IV']
-        record_hmac     = record['hmac']
 
-        keypair = keypairs[collection]
-        encryption_key, hmac_key = keypairs[collection]
+def get_item(collection, item):
+    raw_resp=requests.get(f"{endpoint}/storage/{collection}/{item}", auth=hawk_auth)
+    assert raw_resp.status_code == requests.codes.ok, f"{raw_resp.status_code} is not OK for item {collection}/{item}"
+    resp  = raw_resp.json()
+    record = json.loads(resp['payload'])
 
-        # It appears that the Base-64 encoded ciphertext is what is HMACed.
-        # https://moz-services-docs.readthedocs.io/en/latest/sync/storageformat5.html#crypto-keys-record
-        hmac_comp = hmac.new(key=hmac_key, msg=ciphertext_b64, digestmod=hashlib.sha256).digest()
+    ciphertext_b64  = record['ciphertext'].encode('ascii')
+    iv_b64          = record['IV']
+    record_hmac     = record['hmac']
 
-        hmac_comp_hex = hmac_comp.hex()
-        assert record_hmac == hmac_comp_hex, "Record HMAC is not correct"
+    keypair = keypairs[collection]
+    encryption_key, hmac_key = keypairs[collection]
 
-        ciphertext = b64decode(ciphertext_b64)
-        iv         = b64decode(iv_b64)
+    # It appears that the Base-64 encoded ciphertext is what is HMACed.
+    # https://moz-services-docs.readthedocs.io/en/latest/sync/storageformat5.html#crypto-keys-record
+    hmac_comp = hmac.new(key=hmac_key, msg=ciphertext_b64, digestmod=hashlib.sha256).digest()
 
-        aes = AES.new(encryption_key, AES.MODE_CBC, iv)
-        contents = aes.decrypt(ciphertext)
-        # removing PKS7 padding
-        contents = contents[:-contents[-1]]
-        yield json.loads(contents)
+    hmac_comp_hex = hmac_comp.hex()
+    assert record_hmac == hmac_comp_hex, "Record HMAC is not correct"
+
+    ciphertext = b64decode(ciphertext_b64)
+    iv         = b64decode(iv_b64)
+
+    aes = AES.new(encryption_key, AES.MODE_CBC, iv)
+    contents = aes.decrypt(ciphertext)
+    # removing PKS7 padding
+    contents = contents[:-contents[-1]]
+    return json.loads(contents)
 
 for keys in get_collection("crypto"):
     keypairs.set_collection_default(list(map(b64decode, keys["default"])))
     for collection, keypair in keys['collections'].items():
         keypairs[collection] = list(map(b64decode, keypair))
 
-print("Looking for items to sync")
-for collection, last_mod_time in collections.items():
-    # We handle that before doing this
-    if collection == "crypto":
-        continue
-    # This doesn't have encrypted data and can't be handled via get_collection
-    if collection == "meta":
-        continue
-    print(f"{collection}(last modified time={last_mod_time})")
-    for item in get_collection(collection):
-        print(item)
+print("bookmarks");
+for bookmark in get_collection("bookmarks"):
+    print(bookmark)
+    break
+print("history");
+for item in get_collection("history"):
+    print(item)
+    break
