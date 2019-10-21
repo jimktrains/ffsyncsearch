@@ -17,6 +17,7 @@ Sample: ::
 Files
 -----
 
-`reference` - reference cryptographic tests to confirm usage
-`testbed.py` - a place to put random junk to test
 `sync.py` - Start of the main syncing service
+`auth.py` - Handles authentication
+`utils.py` - Handles API calls to get and decrypt collctions and items
+`schema.sql` - Initial thoughts on the schema to store this to
