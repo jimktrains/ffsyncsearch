@@ -14,7 +14,7 @@ from hkdf import hkdf_extract, hkdf_expand, Hkdf
 import hashlib 
 import hmac
 
-config_file_name = 'config.test.ini'
+config_file_name = 'config.ini'
 
 config = ConfigParser()
 config.read(config_file_name)
@@ -98,6 +98,8 @@ keypairs = AES_HMAC_KeyPairs(encryption_key, hmac_key)
 
 def get_collection(collection):
     raw_resp=requests.get(f"{endpoint}/storage/{collection}", auth=hawk_auth)
+    assert raw_resp.status_code == requests.codes.ok, f"{raw_resp.status_code} is not OK for Collection {collection}"
+
     items = raw_resp.json()
     for item in items:
         raw_resp=requests.get(f"{endpoint}/storage/{collection}/{item}", auth=hawk_auth)
@@ -116,7 +118,7 @@ def get_collection(collection):
         hmac_comp = hmac.new(key=hmac_key, msg=ciphertext_b64, digestmod=hashlib.sha256).digest()
 
         hmac_comp_hex = hmac_comp.hex()
-        assert(record_hmac == hmac_comp_hex)
+        assert record_hmac == hmac_comp_hex, "Record HMAC is not correct"
 
         ciphertext = b64decode(ciphertext_b64)
         iv         = b64decode(iv_b64)
