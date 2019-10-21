@@ -1,16 +1,8 @@
 #!/usr/bin/env python3
 
 from base64 import b64decode
-from configparser import ConfigParser
-import requests
-from fxa.core import Client
-from fxa.plugins.requests import FxABearerTokenAuth, FxABrowserIDAuth
-from requests_hawk import HawkAuth
 import json
-from fxa.crypto import derive_key, calculate_hmac
 from Crypto.Cipher import AES
-
-from hkdf import hkdf_extract, hkdf_expand, Hkdf
 import hashlib 
 import hmac
 
