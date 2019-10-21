@@ -1,3 +1,4 @@
 PyFxA
 requests
 hkdf
+pycrypto
