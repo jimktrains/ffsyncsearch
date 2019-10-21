@@ -29,25 +29,13 @@ if 'hawk' not in config or 'fxa' not in config:
     client = Client("https://api.accounts.firefox.com")
     session = client.login(user['email'], user['password'], keys=True)
 
-    #TODO: Store keys because logining causes an email to be sent out
     keyA,keyB = session.fetch_keys()
-
-    print("Key A: " + keyA.hex())
-    print("Key B: " + keyB.hex())
 
     info = b"identity.mozilla.com/picl/v1/oldsync"
     namespace = b"oldsync"
     keys = derive_key(secret=keyB, namespace=namespace, size=64)
     encryption_key = keys[0:32]
-    hmac_key = keys[32:]
-
-    # Verify that derive key does what I'm expecting
-    prk = hkdf_extract(salt=bytes([0]), input_key_material=keyB, hash=hashlib.sha256)
-    key_bundle = hkdf_expand(pseudo_random_key=prk, info=info, length=64, hash=hashlib.sha256)
-    assert(key_bundle == keys)
-
-    assert(len(encryption_key) == 32)
-    assert(len(hmac_key) == 32)
+    hmac_key = keys[32:64]
 
     # TODO: Store this or a derived longer-lived token
     #       Causes a login event which causes an email
@@ -91,12 +79,10 @@ class AES_HMAC_KeyPairs:
         self.collection_keypair = pair
 
     def get_account_default(self):
-        print("get_account_default", self.account_keypair);
         return self.account_keypair
 
     def get_collection_default(self):
         if self.collection_keypair is not None:
-            print("get_collection_default", self.collection_keypair)
             return self.collection_keypair
         return self.account_keypair
 
@@ -105,7 +91,6 @@ class AES_HMAC_KeyPairs:
 
     def __getitem__(self, key):
         if key in self.collection_keys:
-            print("getitem", self.collection_keys[key])
             return self.collection_keys[key]
         return self.get_collection_default()
 
@@ -115,11 +100,9 @@ def get_collection(collection):
     raw_resp=requests.get(f"{endpoint}/storage/{collection}", auth=hawk_auth)
     items = raw_resp.json()
     for item in items:
-        print(f"  {item}")
         raw_resp=requests.get(f"{endpoint}/storage/{collection}/{item}", auth=hawk_auth)
         resp  = raw_resp.json()
         record = json.loads(resp['payload'])
-        print(record)
 
         ciphertext_b64  = record['ciphertext'].encode('ascii')
         iv_b64          = record['IV']
@@ -133,9 +116,6 @@ def get_collection(collection):
         hmac_comp = hmac.new(key=hmac_key, msg=ciphertext_b64, digestmod=hashlib.sha256).digest()
 
         hmac_comp_hex = hmac_comp.hex()
-        print(f"    HMAC")
-        print(f"      Expected: {record_hmac}")
-        print(f"      Computed: {hmac_comp_hex}")
         assert(record_hmac == hmac_comp_hex)
 
         ciphertext = b64decode(ciphertext_b64)
@@ -148,9 +128,9 @@ def get_collection(collection):
         yield json.loads(contents)
 
 for keys in get_collection("crypto"):
-    print(keys)
     keypairs.set_collection_default(list(map(b64decode, keys["default"])))
-    # do per collection keys here
+    for collection, keypair in keys['collections'].items():
+        keypairs[collection] = list(map(b64decode, keypair))
 
 print("Looking for items to sync")
 for collection, last_mod_time in collections.items():
@@ -163,18 +143,3 @@ for collection, last_mod_time in collections.items():
     print(f"{collection}(last modified time={last_mod_time})")
     for item in get_collection(collection):
         print(item)
-
-### Output for test@jimkeener.com
-# Looking for items to sync
-# tabs(last modified time=1558725453.22)
-# clients(last modified time=1558725452.81)
-# crypto(last modified time=1558452051.34)
-#   keys
-#     HMAC
-#       Expected: e01b0645f1504baa3bce96626592fb9fe809c4d2a221860170ebe1b66e50d51f
-#       Computed: e9bc56ad8be0add9ed424a408554262fab1eed17566f17f8665c07f824ed3216
-# Traceback (most recent call last):
-#   File "./sync.py", line 105, in <module>
-#     assert(record_hmac == hmac_comp_hex)
-# AssertionError
-
