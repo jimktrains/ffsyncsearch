@@ -122,6 +122,7 @@ class HistoryInserter:
 
 def get_history_for_text(conn):
     with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+        # TODO: It might be best to move this into a table.
         domains_to_ignore = [
             # No textual content to scrape
             'openstreetmap.org',
@@ -136,6 +137,9 @@ def get_history_for_text(conn):
             'amazon.com',
             'www.expedia.com',
             'craigslist.org',
+            'chase.com',
+            'citi.com',
+            'pnc.com',
             # URLs that'll always fail or otherwise unwanted
             'wp-admin',
             'wp-login',

@@ -31,3 +31,4 @@ Files
 * `schema.sql` - Initial thoughts on the schema to store this to
 * `Makefile` - Build a new DB
 * `page_fetcher.py` - Fetches the page text to place into the db
+* `search.py` - Example full-text search
