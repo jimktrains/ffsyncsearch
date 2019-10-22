@@ -3,6 +3,7 @@
 import psycopg2
 import psycopg2.extras
 from functools import reduce
+from urllib.parse import urlparse, parse_qs, urlunparse, urlencode
 
 def login(config):
     conn = psycopg2.connect(
@@ -14,6 +15,62 @@ def login(config):
     )
     conn.autocommit = True
     return conn
+
+def clean_url(url):
+    if not url:
+        return None
+
+    parts = urlparse(url)
+    qs = parse_qs(parts.query)
+
+    if 'html_redirect' in qs and 'q' in qs:
+        del qs['q']
+
+    keys_to_remove = [
+        'html_redirect',
+        'redir_token',
+        'event',
+        'tsmac',
+        'tsmic',
+        'utm_content',
+        'utm_medium',
+        'utm_source',
+        'utm_term',
+        'utm_campaign',
+        'utm_id',
+        'utm_name',
+        'ocid',
+        '_ri_',
+        '_ei_',
+        'itm_campaign',
+        'itm_element',
+        'itm_content',
+        'wpmk',
+        'wpisrc',
+        'hpid',
+        'gclid',
+        '_ga',
+        'gclsrc',
+        'dclid',
+        'fbclid',
+        'mscklid',
+        'zanpid',
+        'tid',
+        'tidr',
+    ]
+    for key in keys_to_remove:
+        if key in qs:
+            del qs[key]
+
+    newparts = (
+        parts.scheme,
+        parts.netloc,
+        parts.path,
+        parts.params,
+        urlencode(qs),
+        None
+    )
+    return urlunparse(newparts)
 
 class BookmarkInserter:
     """
@@ -39,21 +96,28 @@ class BookmarkInserter:
             'dateAdded': None,
             'deleted': False,
             'modified': None,
+            'bmkUri': None,
+            'clean_url': None,
         }
         insert_data.update(bookmark)
+
+        if 'bmkUri' in insert_data:
+            insert_data['clean_url'] = clean_url(insert_data['bmkUri'])
 
         # These could be potentially batched, but, we'll cross that bridge
         # if this becomes a problem. Ideally if we're only grabbing new
         # things then this shouldn't be an issue.
         self.cursor.execute("""
             INSERT INTO bookmark_entry 
-            (bookmark_entry_id, bookmark_type, title, date_added, deleted, modified)
+            (bookmark_entry_id, bookmark_type, title, url, date_added, deleted, modified, clean_url)
             VALUES
-            (%(id)s, %(type)s, %(title)s, TO_TIMESTAMP(%(dateAdded)s/1000), %(deleted)s, TO_TIMESTAMP(%(modified)s))
+            (%(id)s, %(type)s, %(title)s, %(bmkUri)s, TO_TIMESTAMP(%(dateAdded)s/1000), %(deleted)s, TO_TIMESTAMP(%(modified)s), %(clean_url)s)
             ON CONFLICT(bookmark_entry_id)
                 DO UPDATE SET
                     title = EXCLUDED.title,
-                    modified = EXCLUDED.modified
+                    modified = EXCLUDED.modified,
+                    url = EXCLUDED.url,
+                    clean_url = EXCLUDED.clean_url
         """, insert_data)
         i = len(self.parents)
         if 'parentid' in bookmark and bookmark['parentid'] not in ['places', 'unfiled']:
@@ -102,22 +166,26 @@ class HistoryInserter:
         }
         insert_data.update(history_entry)
 
+        insert_data['clean_url'] = clean_url(insert_data['histUri'])
+
         if 'visits' in history_entry:
             insert_data['last_visited'] = reduce(reducer, history_entry['visits'], None)
             insert_data['visit_count'] = len(history_entry['visits'])
             del insert_data['visits']
 
         self.cursor.execute("""
-            INSERT INTO history
-            (history_id , last_visited, visit_count, title, url, deleted, modified)
+            INSERT INTO history_entry
+            (history_entry_id , last_visited, visit_count, title, url, deleted, modified, clean_url)
             VALUES
-            (%(id)s, TO_TIMESTAMP(%(last_visited)s/1000000), %(visit_count)s, %(title)s, %(histUri)s, %(deleted)s, TO_TIMESTAMP(%(modified)s))
-            ON CONFLICT(history_id)
+            (%(id)s, TO_TIMESTAMP(%(last_visited)s/1000000), %(visit_count)s, %(title)s, %(histUri)s, %(deleted)s, TO_TIMESTAMP(%(modified)s), %(clean_url)s)
+            ON CONFLICT(history_entry_id)
                 DO UPDATE SET
                     title = EXCLUDED.title,
                     last_visited = EXCLUDED.last_visited,
                     visit_count = EXCLUDED.visit_count,
-                    modified = EXCLUDED.modified
+                    modified = EXCLUDED.modified,
+                    url = EXCLUDED.url,
+                    clean_url = EXCLUDED.clean_url
         """, insert_data)
 
 def get_history_for_text(conn):
@@ -140,6 +208,7 @@ def get_history_for_text(conn):
             'chase.com',
             'citi.com',
             'pnc.com',
+            'news.ycombinator.com/reply',
             # URLs that'll always fail or otherwise unwanted
             'wp-admin',
             'wp-login',
@@ -158,8 +227,19 @@ def get_history_for_text(conn):
             # Misbehaves
             'www.appliancesconnection.com',
         ]
-        ignored = " AND ".join(map(lambda x: f"url NOT LIKE '%{x}%'", domains_to_ignore))
-        cursor.execute(f"SELECT history.* FROM history LEFT JOIN history_url_text USING (history_id) WHERE history_url_text.history_id IS NULL AND {ignored}")
+        ignored = " AND ".join(map(lambda x: f"entry.url NOT LIKE '%{x}%'", domains_to_ignore))
+        sql = f"""
+        SELECT history_entry_id, NULL AS bookmark_entry_id, entry.clean_url AS url, entry.title
+        FROM history_entry AS entry
+        LEFT JOIN history_entry_url_text USING (history_entry_id)
+        WHERE history_entry_url_text.history_entry_id IS NULL AND {ignored}
+        UNION
+        SELECT NULL AS history_entry_id, bookmark_entry_id, entry.clean_url AS url, entry.title
+        FROM bookmark_entry AS entry
+        LEFT JOIN bookmark_entry_url_text USING (bookmark_entry_id)
+        WHERE bookmark_entry_url_text.bookmark_entry_id IS NULL AND {ignored}
+        """
+        cursor.execute(sql)
         return cursor.fetchall()
 
 def insert_url_text(conn, url_text):
@@ -168,45 +248,68 @@ def insert_url_text(conn, url_text):
         'processed_text': None,
         'title': None,
         'headers': None,
+        'history_entry_id': None,
+        'bookmark_entry_id': None,
     }
     insert_data.update(url_text)
 
     with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
         cursor.execute("""
-            INSERT INTO history_url_text
-            (history_id , raw_text, processed_text, title, headers, http_status)
+            INSERT INTO url_text
+            (url, raw_text, processed_text, title, headers, http_status)
             VALUES
-            (%(history_id)s, %(raw_text)s, %(processed_text)s, %(title)s, %(headers)s, %(http_status)s)
-            ON CONFLICT(history_id)
+            (%(url)s, %(raw_text)s, %(processed_text)s, %(title)s, %(headers)s, %(http_status)s)
+            ON CONFLICT(url)
                 DO UPDATE SET 
                     title = EXCLUDED.title, 
                     raw_text = EXCLUDED.raw_text, 
                     processed_text = EXCLUDED.processed_text, 
                     headers = EXCLUDED.headers,
                     http_status = EXCLUDED.http_status
+            RETURNING url_text_id
         """, insert_data)
+        inserted = cursor.fetchone()
+        insert_data['url_text_id'] = inserted['url_text_id']
+
+        if insert_data['history_entry_id']:
+            cursor.execute("INSERT INTO history_entry_url_text (history_entry_id, url_text_id) VALUES (%(history_entry_id)s, %(url_text_id)s) ON CONFLICT DO NOTHING", insert_data)
+        elif insert_data['bookmark_entry_id']:
+            cursor.execute("INSERT INTO bookmark_entry_url_text (bookmark_entry_id, url_text_id) VALUES (%(bookmark_entry_id)s, %(url_text_id)s) ON CONFLICT DO NOTHING", insert_data)
 
 def last_history_time(conn):
     with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
-        cursor.execute("SELECT max(modified) AS last_visited FROM history")
+        cursor.execute("SELECT max(modified) AS last_visited FROM history_entry")
         max_lv = cursor.fetchone()
         return max_lv['last_visited']
 
 def search_text(conn, search_query):
-    sql = """SELECT *,
-       (processed_text_rank + (title_rank * 10) + (headers_rank * 5)) AS rank
-FROM (
-  SELECT history.*,
-          ts_rank_cd(processed_text_tsv, query) AS processed_text_rank,
-          ts_rank_cd(title_tsv, query) AS title_rank,
-          ts_rank_cd(headers_tsv, query) AS headers_rank
-   FROM history
-   CROSS JOIN plainto_tsquery(%s) query
-   JOIN history_url_text USING (history_id)
-   WHERE processed_text_tsv @@ query
-     OR title_tsv @@ query
-     OR headers_tsv @@ query
-) SEARCH
+    sql= """
+SELECT *
+FROM
+  (SELECT *,
+          (processed_text_rank + (title_rank * 10) + (headers_rank * 5)) AS rank
+   FROM
+     (SELECT url_text_id,
+             MIN(history_entry_id) AS history_entry_id,
+             MIN(bookmark_entry_id) AS bookmark_entry_id,
+             MIN(COALESCE(history_entry.title, bookmark_entry.title)) AS title,
+             url_text.url AS url,
+             ts_rank_cd(processed_text_tsv, query) AS processed_text_rank,
+             ts_rank_cd(title_tsv, query) AS title_rank,
+             ts_rank_cd(headers_tsv, query) AS headers_rank
+      FROM url_text
+      CROSS JOIN plainto_tsquery(%s) query
+      LEFT JOIN history_entry_url_text USING (url_text_id)
+      LEFT JOIN history_entry USING (history_entry_id)
+      LEFT JOIN bookmark_entry_url_text USING (url_text_id)
+      LEFT JOIN bookmark_entry USING (bookmark_entry_id)
+      WHERE processed_text_tsv @@ query
+        OR title_tsv @@ query
+        OR headers_tsv @@ query
+      GROUP BY url_text_id, query
+    ) search
+) search_with_rank
+WHERE rank > 0.01
 ORDER BY rank DESC
 """
     with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:

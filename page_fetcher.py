@@ -9,7 +9,7 @@ from readability import Document
 from bs4 import BeautifulSoup
 import psycopg2
 
-#requests_cache.install_cache('demo_cache')
+requests_cache.install_cache('page_fetcher_cache')
 
 
 config_file_name = 'config.ini'
@@ -49,8 +49,10 @@ for he in db.get_history_for_text(conn):
     if i % 1 == 0:
         print(f"On record {i} {he['url']}")
     url_text = {
-        'history_id': he['history_id'],
+        'history_entry_id': he['history_entry_id'],
+        'bookmark_entry_id': he['bookmark_entry_id'],
         'title': he['title'],
+        'url': he['url'],
     }
     try:
         response = requests.get(he['url'], headers=ua_header)
