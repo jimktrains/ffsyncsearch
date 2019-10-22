@@ -130,11 +130,19 @@ def get_history_for_text(conn):
             'dbfiddle.uk',
             'youtube.com',
             'openstreetmap.org',
+            'lowes.com',
+            'googleusercontent',
+            'ebay.com',
+            'amazon.com',
+            'www.expedia.com/Hotel-Search',
+            'www.expedia.com/Flights-Search',
+            'craigslist.org',
         ]
         ignored = " AND ".join(map(lambda x: f"url NOT LIKE '%{x}%'", domains_to_ignore))
-        cursor.execute(f"SELECT * FROM history WHERE {ignored}")
+        cursor.execute(f"SELECT history.* FROM history LEFT JOIN history_url_text USING (history_id) WHERE history_url_text.history_id IS NULL AND {ignored}")
         return cursor.fetchall()
 
+# TODO: store the return code so that I won't revisit bad ones
 def insert_url_text(conn, insert_data):
     with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
         cursor.execute("""
@@ -152,6 +160,6 @@ def insert_url_text(conn, insert_data):
 
 def last_history_time(conn):
     with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
-        cursor.execute("SELECT max(last_visited) AS last_visited FROM history")
+        cursor.execute("SELECT max(modified) AS last_visited FROM history")
         max_lv = cursor.fetchone()
         return max_lv['last_visited']

@@ -40,11 +40,17 @@ def extract_content_text(soup):
         return (body.text, headers)
     return ("", "")
 
+i = 0
 for he in db.get_history_for_text(conn):
+    i += 1
+    if i % 1 == 0:
+        print(f"On record {i} {he['url']}")
     response = requests.get(he['url'])
 
     if response.status_code != requests.codes.ok:
+        print(f"{he['url']} returned code {response.status_code}")
         continue
+
 
     soup = BeautifulSoup(response.text, 'html.parser')
     processed_text, headers = extract_content_text(soup)

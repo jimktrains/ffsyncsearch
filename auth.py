@@ -20,6 +20,8 @@ def login(user):
 
     # TODO: Store this or a derived longer-lived token
     #       Causes a login event which causes an email
+    # TODO: Should move to use OAuth which solves the long-term cred storage
+    #       issue
     fxab = FxABrowserIDAuth(user['email'], user['password'], with_client_state=True)
     raw_resp = requests.get('https://token.services.mozilla.com/1.0/sync/1.5', auth=fxab)
     raw_resp.raise_for_status()
