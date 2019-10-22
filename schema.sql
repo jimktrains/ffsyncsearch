@@ -14,8 +14,11 @@ create table history (
   title text,
   url text,
   modified timestamp,
-  deleted boolean not null default false
+  deleted boolean not null default false,
+  domain text generated always as (split_part(url, '/', 3)) stored
 );
+create index on history(domain);
+create index on history using gist (url gist_trgm_ops);
 
 create table history_url_text (
   history_id text primary key references history,
@@ -23,11 +26,14 @@ create table history_url_text (
   processed_text text,
   title text,
   headers text,
-  http_status int
+  http_status int,
+  processed_text_tsv tsvector generated always as (to_tsvector('english', processed_text)) stored,
+  title_tsv tsvector generated always as (to_tsvector('english', title)) stored,
+  headers_tsv tsvector generated always as (to_tsvector('english', headers)) stored
 );
-create index on history_url_text using gin (to_tsvector('english', processed_text));
-create index on history_url_text using gin (to_tsvector('english', title));
-create index on history_url_text using gin (to_tsvector('english', headers));
+create index on history_url_text using gin (processed_text_tsv);
+create index on history_url_text using gin (title_tsv);
+create index on history_url_text using gin (headers_tsv);
 
 create index on history_url_text using gist (title gist_trgm_ops);
 create index on history_url_text using gist (headers gist_trgm_ops);

@@ -8,6 +8,7 @@ def login(config):
     conn = psycopg2.connect(
         dbname=config['db']['dbname'],
         host=config['db']['host'],
+        port=config['db']['port'],
         user=config['db']['user'],
         password=config['db']['password']
     )
@@ -122,31 +123,36 @@ class HistoryInserter:
 def get_history_for_text(conn):
     with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
         domains_to_ignore = [
-            'duckduckgo.com',
-            'google.com',
+            # No textual content to scrape
+            'openstreetmap.org',
+            # Domains that'll always fail or otherwise unwanted
             'msqc.com',
             'localhost',
+            'duckduckgo.com',
+            'google.com',
             'trello.com',
-            'youtube.com',
-            'openstreetmap.org',
-            'googleusercontent',
+            'paypal.com',
             'ebay.com',
             'amazon.com',
-            'www.expedia.com/Hotel-Search',
-            'www.expedia.com/Flights-Search',
+            'www.expedia.com',
             'craigslist.org',
-            'paypal.com',
-            'moz-extension://',
+            # URLs that'll always fail or otherwise unwanted
             'wp-admin',
             'wp-login',
+            # internal extension pages
+            'moz-extension://',
+            # CDNs (usually direct image links)
+            'i.ebayimg.com'
+            'googleusercontent',
+            'pbs.twimg.com',
+            'i.imgur.com',
+            'dropboxusercontent',
+            '.us.archive.org'
             # These just hang?
             'lowes.com',
             'www.homedepot.com',
             # Misbehaves
             'www.appliancesconnection.com',
-            # Don't want to grab pdfs and other content directly
-            '.us.archive.org'
-
         ]
         ignored = " AND ".join(map(lambda x: f"url NOT LIKE '%{x}%'", domains_to_ignore))
         cursor.execute(f"SELECT history.* FROM history LEFT JOIN history_url_text USING (history_id) WHERE history_url_text.history_id IS NULL AND {ignored}")
@@ -181,3 +187,24 @@ def last_history_time(conn):
         cursor.execute("SELECT max(modified) AS last_visited FROM history")
         max_lv = cursor.fetchone()
         return max_lv['last_visited']
+
+def search_text(conn, search_query):
+    sql = """SELECT *,
+       (processed_text_rank + (title_rank * 10) + (headers_rank * 5)) AS rank
+FROM (
+  SELECT history.*,
+          ts_rank_cd(processed_text_tsv, query) AS processed_text_rank,
+          ts_rank_cd(title_tsv, query) AS title_rank,
+          ts_rank_cd(headers_tsv, query) AS headers_rank
+   FROM history
+   CROSS JOIN plainto_tsquery(%s) query
+   JOIN history_url_text USING (history_id)
+   WHERE processed_text_tsv @@ query
+     OR title_tsv @@ query
+     OR headers_tsv @@ query
+) SEARCH
+ORDER BY rank DESC
+"""
+    with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+        cursor.execute(sql, (search_query,))
+        return cursor.fetchall()

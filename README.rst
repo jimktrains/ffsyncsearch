@@ -17,6 +17,7 @@ Sample: ::
     [db]
     dbname=database_name
     host=host_name_or_ip_or_socket
+    port=port
     user=user_role
     password=super_secret
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.8
 
 import requests
 import requests.exceptions
@@ -24,11 +24,9 @@ def extract_content_text(soup):
     # we'll just do something quick and dirty.
     body = None
 
-    article = soup.select_one('article')
-    role_main = soup.select_one('[role=main]')
-    if article:
+    if article := soup.select_one('article'):
         body = article
-    elif role_main:
+    elif role_main := soup.select_one('[role=main]'):
         body = role_main
     else:
         body = soup.body
@@ -79,12 +77,9 @@ for he in db.get_history_for_text(conn):
     processed_text, headers = extract_content_text(soup)
 
     title = None
-    first_h1 = None
-    if soup.body:
-        first_h1 = soup.body.select_one('h1')
     if soup.title:
        title = soup.title.text
-    elif first_h1:
+    elif first_h1 := (soup.body and soup.body.select_one('h1')):
        title = first_h1.text
 
     url_text.update({
