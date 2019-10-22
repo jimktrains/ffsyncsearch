@@ -33,10 +33,11 @@ class BookmarkInserter:
 
     def insert(self, bookmark):
         insert_data = {
-            'bookmark_type': None,
+            'type': None,
             'title': None,
-            'date_added': None,
+            'dateAdded': None,
             'deleted': False,
+            'modified': None,
         }
         insert_data.update(bookmark)
 
@@ -45,13 +46,16 @@ class BookmarkInserter:
         # things then this shouldn't be an issue.
         self.cursor.execute("""
             INSERT INTO bookmark_entry 
-            (bookmark_entry_id, bookmark_type, title, date_added, deleted)
+            (bookmark_entry_id, bookmark_type, title, date_added, deleted, modified)
             VALUES
-            (%(id)s, %(type)s, %(title)s, TO_TIMESTAMP(%(dateAdded)s/1000), %(deleted)s)
-            ON CONFLICT(bookmark_entry_id) DO UPDATE SET title = EXCLUDED.title
-        """, bookmark)
+            (%(id)s, %(type)s, %(title)s, TO_TIMESTAMP(%(dateAdded)s/1000), %(deleted)s, TO_TIMESTAMP(%(modified)s))
+            ON CONFLICT(bookmark_entry_id)
+                DO UPDATE SET
+                    title = EXCLUDED.title,
+                    modified = EXCLUDED.modified
+        """, insert_data)
         i = len(self.parents)
-        if 'parentid' in bookmark and bookmark['parentid'] != 'places':
+        if 'parentid' in bookmark and bookmark['parentid'] not in ['places', 'unfiled']:
             self.parents[f"child_{i}"] = bookmark['id']
             self.parents[f"parent_{i}"] = bookmark['parentid']
 
@@ -65,6 +69,8 @@ class BookmarkInserter:
         have a list of everything, I have a list of everything here and
         updates in a loop pain me.
         """
+        if len(self.parents) < 1:
+            return
         sql  = f"WITH bookmark_parent AS ("
         sql += " UNION ".join(map(lambda i: f"SELECT %(child_{i})s as childid, %(parent_{i})s as parentid", range(0,len(self.parents),2)))
         sql += f") UPDATE bookmark_entry SET parent_id = parentid FROM bookmark_parent WHERE bookmark_entry_id = childid"
@@ -102,13 +108,18 @@ class HistoryInserter:
 
         self.cursor.execute("""
             INSERT INTO history
-            (history_id , last_visited, visit_count, title, url, deleted)
+            (history_id , last_visited, visit_count, title, url, deleted, modified)
             VALUES
-            (%(id)s, TO_TIMESTAMP(%(last_visited)s/1000000), %(visit_count)s, %(title)s, %(histUri)s, %(deleted)s)
-            ON CONFLICT(history_id) DO UPDATE SET title = EXCLUDED.title, last_visited = EXCLUDED.last_visited, visit_count = EXCLUDED.visit_count
+            (%(id)s, TO_TIMESTAMP(%(last_visited)s/1000000), %(visit_count)s, %(title)s, %(histUri)s, %(deleted)s, TO_TIMESTAMP(%(modified)s))
+            ON CONFLICT(history_id)
+                DO UPDATE SET
+                    title = EXCLUDED.title,
+                    last_visited = EXCLUDED.last_visited,
+                    visit_count = EXCLUDED.visit_count,
+                    modified = EXCLUDED.modified
         """, insert_data)
 
-def get_history(conn):
+def get_history_for_text(conn):
     with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
         domains_to_ignore = [
             'duckduckgo.com',
@@ -138,3 +149,9 @@ def insert_url_text(conn, insert_data):
                     processed_text = EXCLUDED.processed_text, 
                     headers = EXCLUDED.headers
         """, insert_data)
+
+def last_history_time(conn):
+    with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+        cursor.execute("SELECT max(last_visited) AS last_visited FROM history")
+        max_lv = cursor.fetchone()
+        return max_lv['last_visited']

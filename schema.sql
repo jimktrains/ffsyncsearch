@@ -12,7 +12,8 @@ create table history (
   last_visited timestamp,
   visit_count integer,
   title text,
-  url text unique,
+  url text,
+  modified timestamp,
   deleted boolean not null default false
 );
 
@@ -21,8 +22,7 @@ create table history_url_text (
   raw_text text,
   processed_text text,
   title text,
-  headers text,
-  deleted boolean not null default false
+  headers text
 );
 create index on history_url_text using gin (to_tsvector('english', processed_text));
 create index on history_url_text using gin (to_tsvector('english', title));
@@ -39,7 +39,9 @@ create table bookmark_entry (
   title text,
   bookmark_type text,
   parent_id text references bookmark_entry,
-  url text
+  url text,
+  modified timestamp,
+  deleted boolean default false
 );
 
 create table bookmark_tag (

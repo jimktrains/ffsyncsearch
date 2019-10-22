@@ -47,8 +47,8 @@ class AuthRequest:
         self.endpoint       = login_resp['hawk_api_endpoint']
         self.hawk_auth      = HawkAuth(id=login_resp['hawk_id'], key=login_resp['hawk_key'])
 
-    def request(self, path):
+    def request(self, path, params=None):
         path = f"{self.endpoint}/{path}"
-        raw_resp = requests.get(path, auth=self.hawk_auth)
+        raw_resp = requests.get(path, auth=self.hawk_auth, params=params)
         raw_resp.raise_for_status()
-        return raw_resp.json()
+        return raw_resp
