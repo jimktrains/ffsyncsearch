@@ -7,6 +7,9 @@ import hashlib
 import hmac
 
 class AES_HMAC_KeyPairs:
+    """
+    Manages AES and HMAC keypairs in a 3-level hierarchy.
+    """
     def __init__(self, e, h):
         self.account_keypair= (e, h)
 
@@ -33,6 +36,9 @@ class AES_HMAC_KeyPairs:
         return self.get_collection_default()
 
 class Collections:
+    """
+    Represents a set of collections on the firefox account storage server.
+    """
     def __init__(self, auth_request):
         self.keypairs     = AES_HMAC_KeyPairs(auth_request.encryption_key, auth_request.hmac_key)
         self.auth_request = auth_request
@@ -61,6 +67,9 @@ class Collections:
         return Collection(self.keypairs, collection, self.auth_request)
 
 class Collection:
+    """
+    Repersents a collection on a firefox account storage server.
+    """
     def __init__(self, keypairs, collection, auth_request):
         self.keypairs     = keypairs
         self.collection   = collection
@@ -76,6 +85,9 @@ class Collection:
         return p
 
     def keys(self):
+        """
+        Returns all item ids in the collection sorted by oldest first.
+        """
         # https://mozilla-services.readthedocs.io/en/latest/storage/apis-1.5.html
         # 
         # This request has additional optional query parameters:
@@ -95,6 +107,11 @@ class Collection:
         return items
 
     def items(self, newer=None):
+        """
+        Returns an iterator over all items in the collection.
+
+        Fetched 1000 at a time in full, sorted by oldest first.
+        """
         params = {
             'sort': 'oldest',
             'limit': 1000,
@@ -124,6 +141,9 @@ class Collection:
                 yield (item, self[item])
 
     def __getitem__(self, item):
+        """
+        Returns a the authenticated and decrypted item from the collection.
+        """
         bso = None
 
         if item in self.cache:

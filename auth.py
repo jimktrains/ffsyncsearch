@@ -7,11 +7,18 @@ from requests_hawk import HawkAuth
 from fxa.crypto import derive_key, calculate_hmac
 
 def login(user):
+    """
+    Logs a user into their Firefox account and returns tempoary credentials
+    for use by AuthRequest.
+    """
+    # TODO: pull out the urls to be part of the config.
     client = Client("https://api.accounts.firefox.com")
     session = client.login(user['email'], user['password'], keys=True)
 
     keyA,keyB = session.fetch_keys()
 
+    # Magic strings from the docs
+    # https://moz-services-docs.readthedocs.io/en/latest/sync/storageformat5.html
     info = b"identity.mozilla.com/picl/v1/oldsync"
     namespace = b"oldsync"
     keys = derive_key(secret=keyB, namespace=namespace, size=64)
@@ -42,6 +49,10 @@ def login(user):
     }
 
 class AuthRequest:
+    """
+    Provides a wrapper for making requests to the endpoint found when
+    first authenticating and the tempoary credentials.
+    """
     def __init__(self, login_resp):
         self.encryption_key = bytes.fromhex(login_resp['encryption_key'])
         self.hmac_key       = bytes.fromhex(login_resp['hmac_key'])

@@ -20,6 +20,9 @@ config.read(config_file_name)
 conn = db.login(config)
 
 def extract_content_text(soup):
+    """
+    Extracts (processed_text:str, headers: str) from the bs4 node.
+    """
     # The readability module didn't see to work on the python docs, so
     # we'll just do something quick and dirty.
     body = None
@@ -44,7 +47,7 @@ ua_header = {
     'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:67.0) Gecko/20100101 Firefox/67.0',
     'Accept': 'text/html',
 }
-for he in db.get_history_for_text(conn):
+for he in db.get_history_bookmark_needing_text(conn):
     i += 1
     if i % 1 == 0:
         print(f"On record {i} {he['url']}")

@@ -6,6 +6,9 @@ from functools import reduce
 from urllib.parse import urlparse, parse_qs, urlunparse, urlencode
 
 def login(config):
+    """
+    Logs into the database and returns a connection.
+    """
     conn = psycopg2.connect(
         dbname=config['db']['dbname'],
         host=config['db']['host'],
@@ -17,6 +20,9 @@ def login(config):
     return conn
 
 def clean_url(url):
+    """
+    Returns the url with no fragment and some query string parameters stripped.
+    """
     if not url:
         return None
 
@@ -74,10 +80,12 @@ def clean_url(url):
 
 class BookmarkInserter:
     """
-    The reason for this is because the bookmarks aren't given in a way
-    that's topologically sorted, and because I'm lazy, I'm just going to
-    update the parent later.
+    Provides a context manager for inserting bookmarks.
     """
+    #The reason for this is because the bookmarks aren't given in a way
+    #that's topologically sorted, and because I'm lazy, I'm just going to
+    #update the parent later.
+
     def __init__(self, conn):
         self.conn = conn
     def __enter__(self):
@@ -125,15 +133,13 @@ class BookmarkInserter:
             self.parents[f"parent_{i}"] = bookmark['parentid']
 
     def insert_bookmark_parents(self):
-        """
-        Since mass updates from literals isn't quite a thing in SQL,
-        let's create a temp table using a CTE, fill it, and do a mass update
-        via a joined update query.
+        # Since mass updates from literals isn't quite a thing in SQL,
+        # let's create a temp table using a CTE, fill it, and do a mass update
+        # via a joined update query.
 
-        While I'm OK doing the inserts one-at-a time because I don't already
-        have a list of everything, I have a list of everything here and
-        updates in a loop pain me.
-        """
+        # While I'm OK doing the inserts one-at-a time because I don't already
+        # have a list of everything, I have a list of everything here and
+        # updates in a loop pain me.
         if len(self.parents) < 1:
             return
         sql  = f"WITH bookmark_parent AS ("
@@ -142,6 +148,9 @@ class BookmarkInserter:
         self.cursor.execute(sql, self.parents);
 
 class HistoryInserter:
+    """
+    Provides a context manager for inserting history entries.
+    """
     def __init__(self, conn):
         self.conn = conn
     def __enter__(self):
@@ -188,7 +197,10 @@ class HistoryInserter:
                     clean_url = EXCLUDED.clean_url
         """, insert_data)
 
-def get_history_for_text(conn):
+def get_history_bookmark_needing_text(conn):
+    """
+    Returns history and bookmarks needing their text fetched.
+    """
     with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
         # TODO: It might be best to move this into a table.
         domains_to_ignore = [
@@ -243,6 +255,19 @@ def get_history_for_text(conn):
         return cursor.fetchall()
 
 def insert_url_text(conn, url_text):
+    """
+    Inserts the given url_text into the database. Must provides keys:
+
+    * history_entry_id
+    * bookmark_entry_id
+    * url
+    * raw_text
+    * processed_text
+    * title
+    * headers
+    * history_entry_id
+    * bookmark_entry_id
+    """
     insert_data = {
         'raw_text': None,
         'processed_text': None,
@@ -273,7 +298,7 @@ def insert_url_text(conn, url_text):
 
         if insert_data['history_entry_id']:
             cursor.execute("INSERT INTO history_entry_url_text (history_entry_id, url_text_id) VALUES (%(history_entry_id)s, %(url_text_id)s) ON CONFLICT DO NOTHING", insert_data)
-        elif insert_data['bookmark_entry_id']:
+        if insert_data['bookmark_entry_id']:
             cursor.execute("INSERT INTO bookmark_entry_url_text (bookmark_entry_id, url_text_id) VALUES (%(bookmark_entry_id)s, %(url_text_id)s) ON CONFLICT DO NOTHING", insert_data)
 
 def last_history_time(conn):
@@ -283,6 +308,9 @@ def last_history_time(conn):
         return max_lv['last_visited']
 
 def search_text(conn, search_query):
+    """
+    Does a simple full-text-search for the search_query.
+    """
     sql= """
 SELECT *
 FROM
