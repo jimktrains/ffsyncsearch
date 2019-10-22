@@ -40,7 +40,7 @@ def extract_content_text(soup):
         return (body.text, headers)
     return ("", "")
 
-for he in db.get_history(conn):
+for he in db.get_history_for_text(conn):
     response = requests.get(he['url'])
 
     if response.status_code != requests.codes.ok:
