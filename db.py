@@ -151,7 +151,7 @@ def get_history_for_text(conn):
             'pbs.twimg.com',
             'i.imgur.com',
             'dropboxusercontent',
-            '.us.archive.org'
+            'us.archive.org',
             # These just hang?
             'lowes.com',
             'www.homedepot.com',
