@@ -22,13 +22,13 @@ create table history_url_text (
   raw_text text,
   processed_text text,
   title text,
-  headers text
+  headers text,
+  http_status int
 );
 create index on history_url_text using gin (to_tsvector('english', processed_text));
 create index on history_url_text using gin (to_tsvector('english', title));
 create index on history_url_text using gin (to_tsvector('english', headers));
 
-create index on history_url_text using gist (processed_text gist_trgm_ops);
 create index on history_url_text using gist (title gist_trgm_ops);
 create index on history_url_text using gist (headers gist_trgm_ops);
 

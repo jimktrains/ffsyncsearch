@@ -127,35 +127,53 @@ def get_history_for_text(conn):
             'msqc.com',
             'localhost',
             'trello.com',
-            'dbfiddle.uk',
             'youtube.com',
             'openstreetmap.org',
-            'lowes.com',
             'googleusercontent',
             'ebay.com',
             'amazon.com',
             'www.expedia.com/Hotel-Search',
             'www.expedia.com/Flights-Search',
             'craigslist.org',
+            'paypal.com',
+            'moz-extension://',
+            'wp-admin',
+            'wp-login',
+            # These just hang?
+            'lowes.com',
+            'www.homedepot.com',
+            # Misbehaves
+            'www.appliancesconnection.com',
+            # Don't want to grab pdfs and other content directly
+            '.us.archive.org'
+
         ]
         ignored = " AND ".join(map(lambda x: f"url NOT LIKE '%{x}%'", domains_to_ignore))
         cursor.execute(f"SELECT history.* FROM history LEFT JOIN history_url_text USING (history_id) WHERE history_url_text.history_id IS NULL AND {ignored}")
         return cursor.fetchall()
 
-# TODO: store the return code so that I won't revisit bad ones
-def insert_url_text(conn, insert_data):
+def insert_url_text(conn, url_text):
+    insert_data = {
+        'raw_text': None,
+        'processed_text': None,
+        'title': None,
+        'headers': None,
+    }
+    insert_data.update(url_text)
+
     with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
         cursor.execute("""
             INSERT INTO history_url_text
-            (history_id , raw_text, processed_text, title, headers)
+            (history_id , raw_text, processed_text, title, headers, http_status)
             VALUES
-            (%(history_id)s, %(raw_text)s, %(processed_text)s, %(title)s, %(headers)s)
+            (%(history_id)s, %(raw_text)s, %(processed_text)s, %(title)s, %(headers)s, %(http_status)s)
             ON CONFLICT(history_id)
                 DO UPDATE SET 
                     title = EXCLUDED.title, 
                     raw_text = EXCLUDED.raw_text, 
                     processed_text = EXCLUDED.processed_text, 
-                    headers = EXCLUDED.headers
+                    headers = EXCLUDED.headers,
+                    http_status = EXCLUDED.http_status
         """, insert_data)
 
 def last_history_time(conn):
