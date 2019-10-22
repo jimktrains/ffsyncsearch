@@ -69,11 +69,11 @@ for he in db.get_history_for_text(conn):
         db.insert_url_text(conn, url_text)
         continue
 
+    # TODO: Add content-type and per-site handlers
     if 'Content-Type' in response.headers and 'text/html' not in response.headers['Content-Type']:
         print(f"{he['url']} is not HTML (is {response.headers['Content-Type']})")
         db.insert_url_text(conn, url_text)
         continue
-
 
     soup = BeautifulSoup(response.text, 'html.parser')
     processed_text, headers = extract_content_text(soup)
